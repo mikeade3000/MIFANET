@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lagos State Examination Board — CBT Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --navy: #0A3D62;
+    --navy-dark: #062744;
+    --navy-mid: #12507F;
+    --gold: #C9922A;
+    --gold-light: #E4B563;
+    --bg: #F3F5F8;
+    --card: #FFFFFF;
+    --ink: #16232E;
+    --ink-soft: #57677A;
+    --border: #E1E6EC;
+    --danger: #C0392B;
+    --danger-bg: #FDECEA;
+    --success: #1E8449;
+    --success-bg: #E9F7EF;
+    --warn: #B7791F;
+    --warn-bg: #FEF3E2;
+    --radius: 10px;
+    --shadow: 0 2px 10px rgba(10, 61, 98, 0.08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; }
+
+  /* ---------- Shell ---------- */
+  #app { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar {
+    background: var(--navy-dark);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+    position: relative;
+    z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .crest {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: var(--navy-dark); font-size: 16px;
+  }
+  .brand-text { line-height: 1.25; }
+  .brand-text .t1 { font-weight: 700; font-size: 14.5px; letter-spacing: 0.2px; }
+  .brand-text .t2 { font-size: 11.5px; color: #B9CBDA; text-transform: uppercase; letter-spacing: 1px; }
+  .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 14px; }
+  .role-pill {
+    background: var(--gold); color: var(--navy-dark); font-weight: 700;
+    padding: 4px 12px; border-radius: 999px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .btn-logout {
+    background: transparent; border: 1px solid #2E5D82; color: #fff; padding: 7px 14px;
+    border-radius: 7px; font-size: 13px; font-weight: 500;
+  }
+  .btn-logout:hover { background: #123655; }
+
+  main { flex: 1; padding: 28px; max-width: 1180px; margin: 0 auto; width: 100%; }
+
+  .footer {
+    text-align: center; padding: 16px; font-size: 12px; color: var(--ink-soft);
+    border-top: 1px solid var(--border); background: var(--card);
+  }
+  .footer strong { color: var(--navy); }
+
+  /* ---------- Cards / layout ---------- */
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow); margin-bottom: 20px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 18px; color: var(--navy-dark); }
+  .card .sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--ink); margin: 12px 0 6px; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 14px;
+    background: #fff; color: var(--ink);
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy-mid); outline-offset: 1px; border-color: var(--navy-mid); }
+  textarea { resize: vertical; min-height: 70px; }
+
+  .btn { background: var(--navy); color: #fff; border: none; padding: 11px 20px; border-radius: 7px; font-weight: 600; font-size: 14px; }
+  .btn:hover { background: var(--navy-mid); }
+  .btn:disabled { background: #A9B7C3; cursor: not-allowed; }
+  .btn-gold { background: var(--gold); color: var(--navy-dark); }
+  .btn-gold:hover { background: var(--gold-light); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--navy); color: var(--navy); }
+  .btn-sm { padding: 7px 12px; font-size: 12.5px; border-radius: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--ink-soft); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+  .badge-ok { background: var(--success-bg); color: var(--success); }
+  .badge-warn { background: var(--warn-bg); color: var(--warn); }
+  .badge-danger { background: var(--danger-bg); color: var(--danger); }
+
+  /* ---------- Login ---------- */
+  .login-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 20% 20%, #12507F 0%, #062744 60%, #041B30 100%);
+  }
+  .login-card {
+    width: 380px; background: var(--card); border-radius: 14px; padding: 34px 32px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+  .login-crest {
+    width: 56px; height: 56px; border-radius: 12px; margin: 0 auto 16px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--navy-dark); font-size: 22px;
+  }
+  .login-title { text-align: center; font-size: 17px; font-weight: 700; color: var(--navy-dark); margin-bottom: 2px; }
+  .login-sub { text-align: center; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 24px; }
+  .error-msg { background: var(--danger-bg); color: var(--danger); padding: 9px 12px; border-radius: 7px; font-size: 13px; margin-top: 12px; }
+
+  /* ---------- Permission gate ---------- */
+  .gate-overlay {
+    position: fixed; inset: 0; background: var(--navy-dark); z-index: 999;
+    display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+  .gate-card { max-width: 480px; padding: 40px; text-align: center; }
+  .gate-icon { font-size: 44px; margin-bottom: 14px; }
+  .gate-card h2 { color: #fff; margin-bottom: 8px; }
+  .gate-card p { color: #C7D6E3; font-size: 14.5px; line-height: 1.6; }
+  .gate-list { text-align: left; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 16px 20px; margin: 18px 0; font-size: 13.5px; color: #DCE7F0; }
+  .gate-list li { margin-bottom: 6px; }
+
+  /* ---------- Exam interface ---------- */
+  .exam-shell { display: grid; grid-template-columns: 1fr 260px; gap: 20px; }
+  @media (max-width: 900px) { .exam-shell { grid-template-columns: 1fr; } }
+  .exam-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--navy-dark); color: #fff; padding: 12px 20px; border-radius: 10px; margin-bottom: 18px;
+  }
+  .rec-indicator { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; }
+  .rec-dot {
+    width: 11px; height: 11px; border-radius: 50%; background: #E74C3C;
+    animation: pulse 1.4s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .timer { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 700; }
+  .timer.low { color: #FF8A80; }
+
+  .question-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .qn-btn {
+    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: #fff;
+    font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  }
+  .qn-btn.answered { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+  .qn-btn.current { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+  .q-prompt { font-size: 16px; font-weight: 600; margin-bottom: 18px; line-height: 1.5; }
+  .options-list { display: flex; flex-direction: column; gap: 10px; }
+  .option-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1.5px solid var(--border);
+    border-radius: 8px; cursor: pointer; font-size: 14.5px;
+  }
+  .option-row:hover { border-color: var(--navy-mid); }
+  .option-row.selected { border-color: var(--navy); background: #EAF1F7; }
+  .option-row input { margin: 0; }
+
+  .dragdrop-list { display: flex; flex-direction: column; gap: 8px; }
+  .drag-item {
+    padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 8px; background: #fff;
+    display: flex; align-items: center; gap: 10px; cursor: grab; font-size: 14px;
+  }
+  .drag-item.dragging { opacity: 0.4; }
+  .drag-handle { color: var(--ink-soft); font-size: 16px; }
+  .drag-index { width: 22px; height: 22px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  .match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .match-col-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-soft); margin-bottom: 8px; font-weight: 700; }
+  .match-item { padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 7px; margin-bottom: 8px; font-size: 14px; background: #fff; }
+  .match-select { margin-top: 4px; }
+
+  .side-panel .card { padding: 18px; }
+  .cam-preview { width: 100%; border-radius: 8px; background: #000; aspect-ratio: 4/3; object-fit: cover; }
+
+  .exam-actions { display: flex; justify-content: space-between; margin-top: 22px; }
+
+  .violation-toast {
+    position: fixed; top: 20px; right: 20px; background: var(--danger); color: #fff; padding: 14px 20px;
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); z-index: 1000; font-size: 14px; font-weight: 600;
+    max-width: 320px;
+  }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--ink-soft); }
+  .hidden { display: none !important; }
+
+  /* ---------- Bulk upload ---------- */
+  .bulk-instructions {
+    background: #EAF1F7; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--ink); margin-bottom: 14px; line-height: 1.6;
+  }
+  .bulk-instructions code { background: #fff; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .template-link { font-size: 12.5px; color: var(--navy); text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; font-weight: 600; }
+  .template-link:hover { color: var(--navy-mid); }
+  .file-row { display: flex; align-items: center; gap: 12px; margin: 14px 0; flex-wrap: wrap; }
+  input[type=file] { font-size: 13px; }
+  .preview-wrap { max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; margin: 12px 0; }
+  .preview-wrap table { font-size: 12.5px; }
+  .row-error { background: var(--danger-bg); }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* ============================================================
+   LAGOS STATE EXAMINATION BOARD — CBT PLATFORM
+   Frontend application logic
+   Developed by MIFANET RESOURCES for the Lagos State
+   Examination Board. Copyright (c) 2026.
+   ============================================================ */
+
+// ---------- CONFIG ----------
+// Paste your deployed Google Apps Script Web App URL here after setup.
+const API_BASE_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+const RECORDING_CHUNK_SECONDS = 30;   // how often a video chunk is finalized and uploaded
+const ANSWER_SYNC_INTERVAL_MS = 20000; // batch-sync answers to backend every 20s
+const HEARTBEAT_INTERVAL_MS = 45000;
+
+// Bootstrap admin credential — lets you into the Admin panel before the
+// Apps Script backend is deployed or before setupSheetsAndFolders has been
+// run. Only used as a fallback when the real backend is unreachable or not
+// yet initialized; once the backend is live with real accounts, the normal
+// login path is always tried first and takes priority. Because this
+// password is visible in client-side source, don't rely on it for security
+// once this file is hosted somewhere reachable by people you don't trust —
+// treat it purely as a setup convenience, and it's meaningless as an
+// access control once real data exists (bootstrap mode can't touch any
+// backend data at all).
+const BOOTSTRAP_ADMIN_USERNAME = 'admin';
+const BOOTSTRAP_ADMIN_PASSWORD = 'Mifanet@2026Bootstrap';
+
+// ---------- TINY STATE STORE ----------
+const state = {
+  user: null,           // {userId, username, role, fullName}
+  currentView: 'login',
+  exam: null,
+  questions: [],
+  answers: {},          // questionId -> answer value
+  currentQuestionIndex: 0,
+  bootstrapMode: false,
+  bulkUserRows: [],
+  bulkQuestionRows: [],
+  timeRemainingSec: 0,
+  timerHandle: null,
+  syncHandle: null,
+  heartbeatHandle: null,
+  mediaStream: null,
+  mediaRecorder: null,
+  recordedChunks: [],
+  chunkIndex: 0,
+  violationCount: 0,
+  examSubmitted: false
+};
+
+// ---------- API HELPER ----------
+async function apiGet(action, params) {
+  const url = new URL(API_BASE_URL);
+  url.searchParams.set('action', action);
+  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString());
+  return res.json();
+}
+
+async function apiPost(action, payload) {
+  const res = await fetch(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight against Apps Script
+    body: JSON.stringify({ action, payload })
+  });
+  return res.json();
+}
+
+// ---------- LOCAL PERSISTENCE (local-first answers) ----------
+const LOCAL_KEY_PREFIX = 'lagoscbt_';
+
+function localSaveAnswers() {
+  if (!state.exam || !state.user) return;
+  const key = LOCAL_KEY_PREFIX + state.exam.examId + '_' + state.user.userId;
+  localStorage.setItem(key, JSON.stringify({
+    answers: state.answers,
+    timeRemainingSec: state.timeRemainingSec,
+    savedAt: Date.now()
+  }));
+}
+
+function localLoadAnswers() {
+  if (!state.exam || !state.user) return null;
+  const key = LOCAL_KEY_PREFIX + state.exam.examId + '_' + state.user.userId;
+  const raw = localStorage.getItem(key);
+  return raw ? JSON.parse(raw) : null;
+}
+
+// ---------- RENDER ROOT ----------
+function render() {
+  const app = document.getElementById('app');
+  if (state.currentView === 'login') { app.innerHTML = renderLogin(); attachLoginHandlers(); return; }
+
+  app.innerHTML = `
+    <div class="topbar">
+      <div class="brand">
+        <div class="crest">LG</div>
+        <div class="brand-text">
+          <div class="t1">Lagos State Examination Board</div>
+          <div class="t2">Computer Based Testing Platform</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="role-pill">${state.user.role}</span>
+        <span>${state.user.fullName}</span>
+        <button class="btn-logout" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+    <main id="mainContent"></main>
+    <div class="footer">
+      Developed by <strong>MIFANET RESOURCES</strong> for the Lagos State Examination Board. Copyright &copy; 2026.
+    </div>
+  `;
+  document.getElementById('logoutBtn').onclick = logout;
+
+  const main = document.getElementById('mainContent');
+  if (state.currentView === 'admin') { main.innerHTML = renderAdmin(); attachAdminHandlers(); }
+  else if (state.currentView === 'examiner') { main.innerHTML = renderExaminer(); attachExaminerHandlers(); }
+  else if (state.currentView === 'candidateHome') { main.innerHTML = renderCandidateHome(); attachCandidateHomeHandlers(); }
+  else if (state.currentView === 'permissionGate') { main.innerHTML = renderPermissionGate(); attachGateHandlers(); }
+  else if (state.currentView === 'exam') { main.innerHTML = renderExam(); attachExamHandlers(); }
+  else if (state.currentView === 'examSubmitted') { main.innerHTML = renderSubmitted(); }
+}
+
+// ---------- LOGIN ----------
+function renderLogin() {
+  return `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-crest">LG</div>
+        <div class="login-title">Lagos State Examination Board</div>
+        <div class="login-sub">Computer Based Testing Platform</div>
+        <label>Username</label>
+        <input type="text" id="loginUsername" placeholder="Enter your username" />
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter your password" />
+        <button class="btn btn-gold" id="loginBtn" style="width:100%;margin-top:20px;">Sign in</button>
+        <div id="loginError"></div>
+      </div>
+    </div>
+  `;
+}
+
+function attachLoginHandlers() {
+  document.getElementById('loginBtn').onclick = async () => {
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const errEl = document.getElementById('loginError');
+    errEl.innerHTML = '';
+    if (!username || !password) {
+      errEl.innerHTML = '<div class="error-msg">Please enter both username and password.</div>';
+      return;
+    }
+    const isConfigured = API_BASE_URL && API_BASE_URL.indexOf('PASTE_YOUR') === -1;
+
+    // Try the real backend first, unless it's obviously still unconfigured.
+    if (isConfigured) {
+      try {
+        const result = await apiPost('login', { username, password });
+        if (result.success) {
+          state.user = result.user;
+          state.bootstrapMode = false;
+          routeToRoleHome();
+          return;
+        }
+        // Backend reachable but rejected — if it looks like Sheets aren't
+        // set up yet, fall through to bootstrap check; otherwise show the
+        // real error (e.g. genuinely wrong password for a real account).
+        const setupNotDone = /Sheet not found|Run setupSheetsAndFolders/i.test(result.error || '');
+        if (!setupNotDone) {
+          errEl.innerHTML = `<div class="error-msg">${result.error || 'Login failed.'}</div>`;
+          return;
+        }
+      } catch (e) {
+        // Network/deployment error — fall through to bootstrap check below.
+      }
+    }
+
+    // Bootstrap fallback: only for the admin account, only when the real
+    // backend wasn't configured, wasn't reachable, or hasn't been set up yet.
+    if (username === BOOTSTRAP_ADMIN_USERNAME && password === BOOTSTRAP_ADMIN_PASSWORD) {
+      state.user = { userId: 'bootstrap-admin', username: 'admin', role: 'admin', fullName: 'Administrator (Bootstrap Mode)' };
+      state.bootstrapMode = true;
+      routeToRoleHome();
+      return;
+    }
+
+    errEl.innerHTML = isConfigured
+      ? `<div class="error-msg">Invalid username or password.</div>`
+      : `<div class="error-msg">Backend not configured yet (API_BASE_URL is still a placeholder), and these aren't the bootstrap admin credentials. See SETUP_GUIDE.md.</div>`;
+  };
+}
+
+function routeToRoleHome() {
+  if (state.user.role === 'admin') state.currentView = 'admin';
+  else if (state.user.role === 'examiner') state.currentView = 'examiner';
+  else state.currentView = 'candidateHome';
+  render();
+}
+
+function logout() {
+  stopAllTimers();
+  state.user = null;
+  state.currentView = 'login';
+  render();
+}
+
+// ---------- ADMIN VIEW ----------
+function renderAdmin() {
+  const banner = state.bootstrapMode ? `
+    <div class="card" style="border-color:var(--warn); background:var(--warn-bg);">
+      <h2 style="color:var(--warn);">Bootstrap mode — backend not connected</h2>
+      <div class="sub" style="color:var(--warn);">
+        You're viewing the Admin panel without a live backend. Nothing you create here
+        (users, exams, questions) will be saved until <strong>API_BASE_URL</strong> is set
+        to your deployed Apps Script URL and <strong>setupSheetsAndFolders</strong> has been
+        run at least once. See SETUP_GUIDE.md for the full walkthrough.
+      </div>
+    </div>` : '';
+
+  return `
+    ${banner}
+    <div class="grid-2">
+      <div class="card">
+        <h2>Create user account</h2>
+        <div class="sub">Add candidates, examiners, or administrators.</div>
+        <label>Full name</label>
+        <input type="text" id="newFullName" />
+        <label>Username</label>
+        <input type="text" id="newUsername" />
+        <label>Password</label>
+        <input type="password" id="newPassword" />
+        <label>Role</label>
+        <select id="newRole">
+          <option value="candidate">Candidate</option>
+          <option value="examiner">Examiner</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="btn" id="createUserBtn" style="margin-top:16px;">Create account</button>
+        <div id="createUserMsg"></div>
+      </div>
+
+      <div class="card">
+        <h2>Create exam</h2>
+        <div class="sub">Set up a new timed test.</div>
+        <label>Exam title</label>
+        <input type="text" id="newExamTitle" placeholder="e.g. SS2 Mathematics — First Term" />
+        <label>Duration (minutes)</label>
+        <input type="number" id="newExamDuration" value="60" />
+        <button class="btn" id="createExamBtn" style="margin-top:16px;">Create exam</button>
+        <div id="createExamMsg"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Add question to exam</h2>
+      <div class="sub">Supported types: multiple choice, true/false, short answer, drag-and-drop ordering, matching pairs.</div>
+      <label>Exam ID</label>
+      <input type="text" id="qExamId" placeholder="Paste examId shown after creating an exam" />
+      <label>Question type</label>
+      <select id="qType">
+        <option value="mcq">Multiple choice</option>
+        <option value="truefalse">True / False</option>
+        <option value="shortanswer">Short answer</option>
+        <option value="dragdrop">Drag &amp; drop ordering</option>
+        <option value="matching">Matching pairs</option>
+      </select>
+      <label>Prompt</label>
+      <textarea id="qPrompt" placeholder="Enter the question text"></textarea>
+      <label>Options (one per line — for MCQ/drag-drop items/matching left column)</label>
+      <textarea id="qOptions" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+      <label>Correct answer</label>
+      <input type="text" id="qCorrect" placeholder="For MCQ: exact option text. For ordering: comma-separated correct order. For matching: JSON pairs." />
+      <label>Points</label>
+      <input type="number" id="qPoints" value="1" />
+      <button class="btn" id="addQuestionBtn" style="margin-top:16px;">Add question</button>
+      <div id="addQuestionMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Bulk upload user accounts</h2>
+      <div class="sub">Upload many candidates, examiners, or admins at once — from a CSV/Notepad text file or an Excel workbook.</div>
+      <div class="bulk-instructions">
+        Columns required, in this order: <code>fullName, username, password, role</code><br>
+        <code>role</code> must be one of: <code>candidate</code>, <code>examiner</code>, <code>admin</code>.<br>
+        First row must be the header row exactly as above.
+        <br><button class="template-link" id="downloadUserTemplate">Download template (.csv)</button>
+      </div>
+      <div class="file-row">
+        <input type="file" id="userBulkFile" accept=".csv,.txt,.xlsx,.xls" />
+        <button class="btn btn-outline btn-sm" id="parseUserBulkBtn">Parse file</button>
+      </div>
+      <div id="userBulkPreview"></div>
+      <div id="userBulkMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Bulk upload exam questions</h2>
+      <div class="sub">Load an entire question bank for an exam at once — from a CSV/Notepad text file or an Excel workbook.</div>
+      <div class="bulk-instructions">
+        Columns required, in this order: <code>examId, type, prompt, options, correctAnswer, points, order</code><br>
+        <code>type</code> is one of: <code>mcq</code>, <code>truefalse</code>, <code>shortanswer</code>, <code>dragdrop</code>, <code>matching</code>.<br>
+        <code>options</code>: separate multiple choices with a semicolon, e.g. <code>Lagos;Abuja;Kano</code>. Leave blank for short answer.<br>
+        <code>correctAnswer</code> — MCQ/True-False: exact option text. Drag-drop: correct order, semicolon-separated. Matching: pairs as <code>left=right</code>, semicolon-separated, e.g. <code>Lagos=Nigeria;Accra=Ghana</code>. Short answer: leave blank (examiner-graded).<br>
+        <code>points</code>: whole number. <code>order</code>: whole number controlling question sequence (e.g. 1, 2, 3…).<br>
+        First row must be the header row exactly as above.
+        <br><button class="template-link" id="downloadQuestionTemplate">Download template (.csv)</button>
+      </div>
+      <div class="file-row">
+        <input type="file" id="questionBulkFile" accept=".csv,.txt,.xlsx,.xls" />
+        <button class="btn btn-outline btn-sm" id="parseQuestionBulkBtn">Parse file</button>
+      </div>
+      <div id="questionBulkPreview"></div>
+      <div id="questionBulkMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Assign candidate to exam</h2>
+      <label>Exam ID</label>
+      <input type="text" id="assignExamId" />
+      <label>Candidate user ID</label>
+      <input type="text" id="assignCandidateId" placeholder="Paste candidate's userId" />
+      <button class="btn btn-outline" id="assignBtn" style="margin-top:16px;">Assign</button>
+      <div id="assignMsg"></div>
+    </div>
+  `;
+}
+
+function attachAdminHandlers() {
+  document.getElementById('createUserBtn').onclick = async () => {
+    const payload = {
+      fullName: val('newFullName'), username: val('newUsername'),
+      password: val('newPassword'), role: val('newRole')
+    };
+    if (!payload.fullName || !payload.username || !payload.password) {
+      msg('createUserMsg', 'All fields are required.', true); return;
+    }
+    const r = await apiPost('createUser', payload);
+    msg('createUserMsg', r.success ? `Account created. User ID: ${r.userId}` : r.error, !r.success);
+  };
+
+  document.getElementById('createExamBtn').onclick = async () => {
+    const title = val('newExamTitle'), durationMinutes = Number(val('newExamDuration'));
+    if (!title || !durationMinutes) { msg('createExamMsg', 'Title and duration are required.', true); return; }
+    const r = await apiPost('createExam', { title, durationMinutes, createdBy: state.user.userId });
+    msg('createExamMsg', r.success ? `Exam created. Exam ID: ${r.examId}` : r.error, !r.success);
+  };
+
+  document.getElementById('addQuestionBtn').onclick = async () => {
+    const examId = val('qExamId'), type = val('qType'), prompt = val('qPrompt');
+    const optionsRaw = val('qOptions').split('\n').map(s => s.trim()).filter(Boolean);
+    const correctRaw = val('qCorrect');
+    const points = Number(val('qPoints')) || 1;
+    if (!examId || !prompt) { msg('addQuestionMsg', 'Exam ID and prompt are required.', true); return; }
+
+    let correctAnswer = correctRaw;
+    if (type === 'dragdrop') correctAnswer = correctRaw.split(',').map(s => s.trim());
+    if (type === 'matching') { try { correctAnswer = JSON.parse(correctRaw); } catch (e) { /* leave as string */ } }
+
+    const r = await apiPost('addQuestion', {
+      examId, type, prompt, options: optionsRaw, correctAnswer, points,
+      order: Date.now()
+    });
+    msg('addQuestionMsg', r.success ? `Question added (${r.questionId}).` : r.error, !r.success);
+  };
+
+  document.getElementById('assignBtn').onclick = async () => {
+    const examId = val('assignExamId'), candidateId = val('assignCandidateId');
+    if (!examId || !candidateId) { msg('assignMsg', 'Both fields are required.', true); return; }
+    const r = await apiPost('assignCandidate', { examId, candidateId });
+    msg('assignMsg', r.success ? 'Candidate assigned.' : r.error, !r.success);
+  };
+
+  // ---- Bulk user upload ----
+  document.getElementById('downloadUserTemplate').onclick = () => {
+    downloadCSV('user_upload_template.csv',
+      'fullName,username,password,role\nAdaeze Okonkwo,adaeze.okonkwo,TempPass123!,candidate\nTunde Bello,tunde.bello,TempPass123!,examiner');
+  };
+
+  document.getElementById('parseUserBulkBtn').onclick = async () => {
+    const fileInput = document.getElementById('userBulkFile');
+    const previewEl = document.getElementById('userBulkPreview');
+    const msgEl = document.getElementById('userBulkMsg');
+    msgEl.innerHTML = '';
+    if (!fileInput.files.length) { msg('userBulkMsg', 'Choose a file first.', true); return; }
+    try {
+      const rawRows = await parseUploadedFile(fileInput.files[0]);
+      const { valid, errors } = normalizeUserRows(rawRows);
+      state.bulkUserRows = valid;
+      previewEl.innerHTML = renderPreviewTable(
+        ['fullName', 'username', 'password', 'role'], valid, errors,
+        valid.length ? `<button class="btn btn-gold btn-sm" id="confirmUserBulkBtn">Upload ${valid.length} account(s)</button>` : ''
+      );
+      if (valid.length) {
+        document.getElementById('confirmUserBulkBtn').onclick = async () => {
+          msg('userBulkMsg', 'Uploading…', false);
+          const r = await apiPost('createUsersBulk', { users: valid });
+          const skippedNote = r.success && r.skipped && r.skipped.length ? ` ${r.skipped.length} skipped (duplicate username or missing field).` : '';
+          msg('userBulkMsg', r.success ? `${r.created} account(s) created.${skippedNote}` : (r.error || 'Upload failed.'), !r.success);
+          if (r.success) { previewEl.innerHTML = ''; fileInput.value = ''; }
+        };
+      }
+    } catch (e) {
+      msg('userBulkMsg', 'Could not parse that file: ' + e.message, true);
+    }
+  };
+
+  // ---- Bulk question upload ----
+  document.getElementById('downloadQuestionTemplate').onclick = () => {
+    downloadCSV('question_upload_template.csv',
+      'examId,type,prompt,options,correctAnswer,points,order\n' +
+      'exam_abc123,mcq,What is the capital of Nigeria?,Lagos;Abuja;Kano;Ibadan,Abuja,1,1\n' +
+      'exam_abc123,truefalse,Lagos is the capital of Nigeria.,,False,1,2\n' +
+      'exam_abc123,shortanswer,Briefly explain federalism.,,,2,3\n' +
+      'exam_abc123,dragdrop,Arrange in chronological order.,Independence;Civil War;Return to Democracy,Independence;Civil War;Return to Democracy,2,4\n' +
+      'exam_abc123,matching,Match each city to its country.,Lagos;Accra;Nairobi,Lagos=Nigeria;Accra=Ghana;Nairobi=Kenya,3,5'
+    );
+  };
+
+  document.getElementById('parseQuestionBulkBtn').onclick = async () => {
+    const fileInput = document.getElementById('questionBulkFile');
+    const previewEl = document.getElementById('questionBulkPreview');
+    const msgEl = document.getElementById('questionBulkMsg');
+    msgEl.innerHTML = '';
+    if (!fileInput.files.length) { msg('questionBulkMsg', 'Choose a file first.', true); return; }
+    try {
+      const rawRows = await parseUploadedFile(fileInput.files[0]);
+      const { valid, errors } = normalizeQuestionRows(rawRows);
+      state.bulkQuestionRows = valid;
+      previewEl.innerHTML = renderPreviewTable(
+        ['examId', 'type', 'prompt', 'points', 'order'], valid, errors,
+        valid.length ? `<button class="btn btn-gold btn-sm" id="confirmQuestionBulkBtn">Upload ${valid.length} question(s)</button>` : ''
+      );
+      if (valid.length) {
+        document.getElementById('confirmQuestionBulkBtn').onclick = async () => {
+          msg('questionBulkMsg', 'Uploading…', false);
+          const r = await apiPost('addQuestionsBulk', { questions: valid });
+          msg('questionBulkMsg', r.success ? `${r.created} question(s) added.` : (r.error || 'Upload failed.'), !r.success);
+          if (r.success) { previewEl.innerHTML = ''; fileInput.value = ''; }
+        };
+      }
+    } catch (e) {
+      msg('questionBulkMsg', 'Could not parse that file: ' + e.message, true);
+    }
+  };
+}
+
+// ---------- BULK UPLOAD HELPERS ----------
+
+function downloadCSV(filename, csvText) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Returns an array of row objects keyed by header name, from either a
+// CSV/Notepad text file or an Excel (.xlsx/.xls) workbook's first sheet.
+async function parseUploadedFile(file) {
+  const isExcel = /\.xlsx$|\.xls$/i.test(file.name);
+  if (isExcel) {
+    if (typeof XLSX === 'undefined') throw new Error('Excel parser did not load — check your internet connection and reload the page.');
+    const buffer = await readFileAsArrayBuffer(file);
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  }
+  const text = await readFileAsText(file);
+  return parseCSVText(text);
+}
+
+// Minimal CSV parser supporting quoted fields containing commas.
+function parseCSVText(text) {
+  const lines = text.split(/\r\n|\n|\r/).filter(l => l.trim().length > 0);
+  if (!lines.length) return [];
+  const parseLine = (line) => {
+    const cells = [];
+    let cur = '', inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else cur += ch;
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === ',') { cells.push(cur); cur = ''; }
+        else cur += ch;
+      }
+    }
+    cells.push(cur);
+    return cells.map(c => c.trim());
+  };
+  const headers = parseLine(lines[0]).map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cells = parseLine(line);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = cells[i] !== undefined ? cells[i] : ''; });
+    return obj;
+  });
+}
+
+function normalizeUserRows(rawRows) {
+  const valid = [], errors = [];
+  const allowedRoles = ['candidate', 'examiner', 'admin'];
+  rawRows.forEach((row, idx) => {
+    const fullName = String(row.fullName || '').trim();
+    const username = String(row.username || '').trim();
+    const password = String(row.password || '').trim();
+    const role = String(row.role || '').trim().toLowerCase();
+    const rowErrors = [];
+    if (!fullName) rowErrors.push('missing fullName');
+    if (!username) rowErrors.push('missing username');
+    if (!password) rowErrors.push('missing password');
+    if (!allowedRoles.includes(role)) rowErrors.push(`invalid role "${role}"`);
+    if (rowErrors.length) errors.push({ rowNumber: idx + 2, issues: rowErrors, raw: row });
+    else valid.push({ fullName, username, password, role });
+  });
+  return { valid, errors };
+}
+
+function normalizeQuestionRows(rawRows) {
+  const valid = [], errors = [];
+  const allowedTypes = ['mcq', 'truefalse', 'shortanswer', 'dragdrop', 'matching'];
+  rawRows.forEach((row, idx) => {
+    const examId = String(row.examId || '').trim();
+    const type = String(row.type || '').trim().toLowerCase();
+    const prompt = String(row.prompt || '').trim();
+    const optionsRaw = String(row.options || '').trim();
+    const correctRaw = String(row.correctAnswer || '').trim();
+    const points = Number(row.points) || 1;
+    const order = Number(row.order) || (idx + 1);
+    const rowErrors = [];
+    if (!examId) rowErrors.push('missing examId');
+    if (!allowedTypes.includes(type)) rowErrors.push(`invalid type "${type}"`);
+    if (!prompt) rowErrors.push('missing prompt');
+
+    const options = optionsRaw ? optionsRaw.split(';').map(s => s.trim()).filter(Boolean) : [];
+    let correctAnswer = correctRaw;
+    if (type === 'dragdrop') correctAnswer = correctRaw ? correctRaw.split(';').map(s => s.trim()) : [];
+    if (type === 'matching') {
+      const pairs = {};
+      correctRaw.split(';').filter(Boolean).forEach(pairStr => {
+        const eq = pairStr.indexOf('=');
+        if (eq > -1) pairs[pairStr.slice(0, eq).trim()] = pairStr.slice(eq + 1).trim();
+      });
+      correctAnswer = pairs;
+      if (!Object.keys(pairs).length) rowErrors.push('matching correctAnswer must use left=right pairs separated by ;');
+    }
+    if ((type === 'mcq' || type === 'dragdrop' || type === 'matching') && options.length < 2) {
+      rowErrors.push('needs at least 2 options');
+    }
+
+    if (rowErrors.length) errors.push({ rowNumber: idx + 2, issues: rowErrors, raw: row });
+    else valid.push({ examId, type, prompt, options, correctAnswer, points, order });
+  });
+  return { valid, errors };
+}
+
+function renderPreviewTable(columns, validRows, errors, actionHtml) {
+  let html = '<div class="preview-wrap"><table><tr>' + columns.map(c => `<th>${c}</th>`).join('') + '<th>Status</th></tr>';
+  validRows.forEach(row => {
+    html += '<tr>' + columns.map(c => `<td>${escapeHtml(Array.isArray(row[c]) ? row[c].join('; ') : (typeof row[c] === 'object' ? JSON.stringify(row[c]) : row[c]))}</td>`).join('') + '<td><span class="badge badge-ok">Ready</span></td></tr>';
+  });
+  errors.forEach(err => {
+    html += `<tr class="row-error">` + columns.map(c => `<td>${escapeHtml(err.raw[c] !== undefined ? err.raw[c] : '')}</td>`).join('') + `<td><span class="badge badge-danger">Row ${err.rowNumber}: ${err.issues.join(', ')}</span></td></tr>`;
+  });
+  html += '</table></div>';
+  html += `<div class="sub">${validRows.length} row(s) ready to upload${errors.length ? `, ${errors.length} row(s) with errors (will be skipped)` : ''}.</div>`;
+  html += actionHtml;
+  return html;
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+function msg(id, text, isError) {
+  document.getElementById(id).innerHTML = `<div class="${isError ? 'error-msg' : 'error-msg'}" style="${isError ? '' : 'background:var(--success-bg);color:var(--success);'}">${text}</div>`;
+}
+
+// ---------- EXAMINER VIEW ----------
+function renderExaminer() {
+  return `
+    <div class="card">
+      <h2>Monitor exam</h2>
+      <div class="sub">Enter an exam ID to view live results and proctoring violations.</div>
+      <label>Exam ID</label>
+      <input type="text" id="monitorExamId" />
+      <button class="btn" id="loadMonitorBtn" style="margin-top:14px;">Load</button>
+    </div>
+    <div id="monitorResults"></div>
+  `;
+}
+
+function attachExaminerHandlers() {
+  document.getElementById('loadMonitorBtn').onclick = async () => {
+    const examId = val('monitorExamId');
+    if (!examId) return;
+    const [results, violations] = await Promise.all([
+      apiGet('getResults', { examId }),
+      apiGet('getViolations', { examId })
+    ]);
+    const resultsBody = document.getElementById('monitorResults');
+    let html = '<div class="card"><h2>Scores</h2>';
+    if (results.success && results.results.length) {
+      html += '<table><tr><th>Candidate</th><th>Score</th><th>Max</th><th>Answered</th></tr>';
+      results.results.forEach(r => {
+        html += `<tr><td>${r.candidateId}</td><td>${r.score}</td><td>${r.maxScore}</td><td>${r.answered}</td></tr>`;
+      });
+      html += '</table>';
+    } else {
+      html += '<div class="empty-state">No responses recorded yet.</div>';
+    }
+    html += '</div><div class="card"><h2>Proctoring violations</h2>';
+    if (violations.success && violations.violations.length) {
+      html += '<table><tr><th>Candidate</th><th>Type</th><th>Detail</th><th>Time</th></tr>';
+      violations.violations.forEach(v => {
+        html += `<tr><td>${v.candidateId}</td><td><span class="badge badge-warn">${v.type}</span></td><td>${v.detail || '—'}</td><td>${new Date(v.timestamp).toLocaleString()}</td></tr>`;
+      });
+      html += '</table>';
+    } else {
+      html += '<div class="empty-state">No violations recorded.</div>';
+    }
+    html += '</div>';
+    resultsBody.innerHTML = html;
+  };
+}
+
+// ---------- CANDIDATE HOME ----------
+function renderCandidateHome() {
+  return `
+    <div class="card">
+      <h2>Start an exam</h2>
+      <div class="sub">Enter the exam ID provided by your examination centre.</div>
+      <label>Exam ID</label>
+      <input type="text" id="candExamId" />
+      <button class="btn btn-gold" id="startExamBtn" style="margin-top:14px;">Continue</button>
+      <div id="startExamMsg"></div>
+    </div>
+  `;
+}
+
+function attachCandidateHomeHandlers() {
+  document.getElementById('startExamBtn').onclick = async () => {
+    const examId = val('candExamId');
+    if (!examId) return;
+    const result = await apiGet('getExamForCandidate', { examId, candidateId: state.user.userId });
+    if (!result.success) { msg('startExamMsg', result.error || 'Exam not found.', true); return; }
+    state.exam = result.exam;
+    state.questions = result.questions;
+    state.answers = {};
+    state.currentQuestionIndex = 0;
+
+    const saved = localLoadAnswers();
+    if (saved) { state.answers = saved.answers || {}; }
+
+    state.currentView = 'permissionGate';
+    render();
+  };
+}
+
+// ---------- PERMISSION GATE (camera/mic) ----------
+function renderPermissionGate() {
+  return `
+    <div class="gate-overlay">
+      <div class="gate-card">
+        <div class="gate-icon">🎥</div>
+        <h2>Camera &amp; microphone required</h2>
+        <p>${escapeHtml(state.exam.title)} must be taken with your camera and microphone active for the full duration. Recording begins automatically once you continue and cannot be paused or disabled.</p>
+        <ul class="gate-list">
+          <li>Ensure you are alone, in a quiet, well-lit room.</li>
+          <li>Keep your face visible in the camera frame throughout.</li>
+          <li>The exam will run in fullscreen. Exiting fullscreen or switching tabs is logged as a violation.</li>
+          <li>You will not be able to start the exam without granting access.</li>
+        </ul>
+        <button class="btn btn-gold" id="grantAccessBtn" style="width:100%;">Enable camera &amp; microphone to continue</button>
+        <div id="gateError" style="margin-top:14px;"></div>
+      </div>
+    </div>
+  `;
+}
+
+function attachGateHandlers() {
+  document.getElementById('grantAccessBtn').onclick = async () => {
+    const errEl = document.getElementById('gateError');
+    errEl.innerHTML = '';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      state.mediaStream = stream;
+      await enterFullscreen();
+      beginExam();
+    } catch (e) {
+      errEl.innerHTML = `<div class="error-msg">Camera/microphone access was denied or unavailable. You must grant access to begin the exam. (${e.message})</div>`;
+    }
+  };
+}
+
+async function enterFullscreen() {
+  const el = document.documentElement;
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+  } catch (e) { /* some browsers require direct user gesture; button click satisfies this */ }
+}
+
+// ---------- EXAM FLOW ----------
+function beginExam() {
+  state.timeRemainingSec = Number(state.exam.durationMinutes) * 60;
+  state.violationCount = 0;
+  state.examSubmitted = false;
+  state.currentView = 'exam';
+  render();
+
+  apiPost('startSession', { examId: state.exam.examId, candidateId: state.user.userId });
+  startRecording();
+  startTimer();
+  startAnswerSync();
+  startHeartbeat();
+  attachProctoringListeners();
+}
+
+function renderExam() {
+  const q = state.questions[state.currentQuestionIndex];
+  const navButtons = state.questions.map((qq, i) => {
+    const answered = state.answers[qq.questionId] !== undefined;
+    const cls = i === state.currentQuestionIndex ? 'current' : (answered ? 'answered' : '');
+    return `<button class="qn-btn ${cls}" data-idx="${i}">${i + 1}</button>`;
+  }).join('');
+
+  return `
+    <div class="exam-topbar">
+      <div class="rec-indicator"><span class="rec-dot"></span> RECORDING — camera &amp; audio active</div>
+      <div class="timer" id="timerDisplay">--:--</div>
+    </div>
+    <div class="exam-shell">
+      <div>
+        <div class="card">
+          <div class="question-nav">${navButtons}</div>
+          <div class="q-prompt">${state.currentQuestionIndex + 1}. ${escapeHtml(q.prompt)}</div>
+          <div id="questionBody">${renderQuestionBody(q)}</div>
+          <div class="exam-actions">
+            <button class="btn btn-outline" id="prevBtn" ${state.currentQuestionIndex === 0 ? 'disabled' : ''}>Previous</button>
+            ${state.currentQuestionIndex === state.questions.length - 1
+              ? `<button class="btn btn-gold" id="submitBtn">Submit exam</button>`
+              : `<button class="btn" id="nextBtn">Save &amp; next</button>`}
+          </div>
+        </div>
+      </div>
+      <div class="side-panel">
+        <div class="card">
+          <video id="camPreview" class="cam-preview" autoplay muted playsinline></video>
+          <div class="sub" style="margin-top:10px;">Your camera and microphone are being recorded for the full duration of this exam.</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuestionBody(q) {
+  const current = state.answers[q.questionId];
+  if (q.type === 'mcq' || q.type === 'truefalse') {
+    const options = q.type === 'truefalse' ? ['True', 'False'] : q.options;
+    return `<div class="options-list">` + options.map((opt, i) => `
+      <label class="option-row ${current === opt ? 'selected' : ''}" data-opt="${escapeAttr(opt)}">
+        <input type="radio" name="mcq" ${current === opt ? 'checked' : ''} />
+        <span>${escapeHtml(opt)}</span>
+      </label>`).join('') + `</div>`;
+  }
+  if (q.type === 'shortanswer') {
+    return `<textarea id="shortAnswerInput" placeholder="Type your answer">${current ? escapeHtml(current) : ''}</textarea>`;
+  }
+  if (q.type === 'dragdrop') {
+    const order = current || [...q.options];
+    return `<div class="dragdrop-list" id="dragList">` + order.map((item, i) => `
+      <div class="drag-item" draggable="true" data-item="${escapeAttr(item)}">
+        <span class="drag-index">${i + 1}</span>
+        <span class="drag-handle">☰</span>
+        <span>${escapeHtml(item)}</span>
+      </div>`).join('') + `</div><div class="sub" style="margin-top:10px;">Drag items into the correct order.</div>`;
+  }
+  if (q.type === 'matching') {
+    // options assumed to be "Left | Right" pairs encoded as separate arrays via prompt convention;
+    // here we treat q.options as left items, and reuse them shuffled as right choices.
+    const rightChoices = shuffle([...q.options]);
+    const selections = current || {};
+    return `<div class="match-grid">
+      <div><div class="match-col-title">Item</div>${q.options.map((left, i) => `
+        <div class="match-item">${escapeHtml(left)}
+          <select class="match-select" data-left="${escapeAttr(left)}">
+            <option value="">— select match —</option>
+            ${rightChoices.map(r => `<option value="${escapeAttr(r)}" ${selections[left] === r ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+          </select>
+        </div>`).join('')}</div>
+      <div><div class="match-col-title">Matches with</div>
+        <div class="sub">Choose the corresponding match from the dropdown next to each item.</div>
+      </div>
+    </div>`;
+  }
+  return '<div class="empty-state">Unsupported question type.</div>';
+}
+
+function attachExamHandlers() {
+  const q = state.questions[state.currentQuestionIndex];
+
+  if (document.getElementById('camPreview') && state.mediaStream) {
+    document.getElementById('camPreview').srcObject = state.mediaStream;
+  }
+
+  document.querySelectorAll('.qn-btn').forEach(btn => {
+    btn.onclick = () => { persistCurrentAnswer(); state.currentQuestionIndex = Number(btn.dataset.idx); render(); };
+  });
+
+  if (q.type === 'mcq' || q.type === 'truefalse') {
+    document.querySelectorAll('.option-row').forEach(row => {
+      row.onclick = () => { state.answers[q.questionId] = row.dataset.opt; render(); };
+    });
+  }
+
+  if (q.type === 'dragdrop') {
+    setupDragAndDrop(q);
+  }
+
+  if (q.type === 'matching') {
+    document.querySelectorAll('.match-select').forEach(sel => {
+      sel.onchange = () => {
+        const current = state.answers[q.questionId] || {};
+        current[sel.dataset.left] = sel.value;
+        state.answers[q.questionId] = current;
+        localSaveAnswers();
+      };
+    });
+  }
+
+  const prevBtn = document.getElementById('prevBtn');
+  if (prevBtn) prevBtn.onclick = () => { persistCurrentAnswer(); state.currentQuestionIndex--; render(); };
+
+  const nextBtn = document.getElementById('nextBtn');
+  if (nextBtn) nextBtn.onclick = () => { persistCurrentAnswer(); state.currentQuestionIndex++; render(); };
+
+  const submitBtn = document.getElementById('submitBtn');
+  if (submitBtn) submitBtn.onclick = () => { persistCurrentAnswer(); confirmSubmit(); };
+}
+
+function persistCurrentAnswer() {
+  const q = state.questions[state.currentQuestionIndex];
+  if (q.type === 'shortanswer') {
+    const el = document.getElementById('shortAnswerInput');
+    if (el) state.answers[q.questionId] = el.value;
+  }
+  localSaveAnswers();
+}
+
+function setupDragAndDrop(q) {
+  const list = document.getElementById('dragList');
+  let dragEl = null;
+  list.querySelectorAll('.drag-item').forEach(item => {
+    item.addEventListener('dragstart', () => { dragEl = item; item.classList.add('dragging'); });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      const newOrder = [...list.querySelectorAll('.drag-item')].map(el => el.dataset.item);
+      state.answers[q.questionId] = newOrder;
+      localSaveAnswers();
+      renderDragIndices();
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      const after = getDragAfterElement(list, e.clientY);
+      if (after == null) list.appendChild(dragEl);
+      else list.insertBefore(dragEl, after);
+    });
+  });
+}
+
+function renderDragIndices() {
+  document.querySelectorAll('#dragList .drag-item').forEach((el, i) => {
+    el.querySelector('.drag-index').textContent = i + 1;
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const items = [...container.querySelectorAll('.drag-item:not(.dragging)')];
+  return items.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return { offset, element: child };
+    return closest;
+  }, { offset: -Infinity }).element;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+// ---------- TIMER ----------
+function startTimer() {
+  updateTimerDisplay();
+  state.timerHandle = setInterval(() => {
+    state.timeRemainingSec--;
+    updateTimerDisplay();
+    if (state.timeRemainingSec <= 0) { clearInterval(state.timerHandle); autoSubmit(); }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('timerDisplay');
+  if (!el) return;
+  const m = Math.floor(state.timeRemainingSec / 60);
+  const s = state.timeRemainingSec % 60;
+  el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  el.classList.toggle('low', state.timeRemainingSec <= 60);
+}
+
+// ---------- ANSWER SYNC (local-first, batched) ----------
+function startAnswerSync() {
+  state.syncHandle = setInterval(syncAnswersToServer, ANSWER_SYNC_INTERVAL_MS);
+}
+
+async function syncAnswersToServer() {
+  if (!state.exam || state.examSubmitted) return;
+  const answers = Object.entries(state.answers).map(([questionId, answer]) => ({ questionId, answer }));
+  if (!answers.length) return;
+  try {
+    await apiPost('submitAnswers', { examId: state.exam.examId, candidateId: state.user.userId, answers });
+  } catch (e) { /* will retry on next interval; local copy remains source of truth */ }
+}
+
+function startHeartbeat() {
+  state.heartbeatHandle = setInterval(() => {
+    apiPost('startSession', { examId: state.exam.examId, candidateId: state.user.userId }).catch(() => {});
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+// ---------- RECORDING (camera/mic -> chunked upload to Drive) ----------
+function startRecording() {
+  if (!state.mediaStream) return;
+  state.chunkIndex = 0;
+  startNewRecorderSegment();
+}
+
+function startNewRecorderSegment() {
+  const mimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  const mimeType = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const recorder = new MediaRecorder(state.mediaStream, { mimeType });
+  const chunks = [];
+
+  recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: mimeType });
+    await uploadChunk(blob, mimeType, state.chunkIndex);
+    state.chunkIndex++;
+    if (!state.examSubmitted) startNewRecorderSegment(); // continue recording next segment
+  };
+
+  recorder.start();
+  state.mediaRecorder = recorder;
+  setTimeout(() => { if (recorder.state !== 'inactive') recorder.stop(); }, RECORDING_CHUNK_SECONDS * 1000);
+}
+
+function stopRecording() {
+  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
+  if (state.mediaStream) state.mediaStream.getTracks().forEach(t => t.stop());
+}
+
+async function uploadChunk(blob, mimeType, chunkIndex) {
+  try {
+    const base64Data = await blobToBase64(blob);
+    await apiPost('uploadRecordingChunk', {
+      examId: state.exam.examId, candidateId: state.user.userId,
+      chunkIndex, mimeType, base64Data
+    });
+  } catch (e) { /* chunk upload failure is logged server-side as a gap; recording continues */ }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// ---------- PROCTORING (fullscreen + tab-switch detection) ----------
+function attachProctoringListeners() {
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  window.addEventListener('blur', onWindowBlur);
+}
+
+function detachProctoringListeners() {
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  document.removeEventListener('fullscreenchange', onFullscreenChange);
+  window.removeEventListener('blur', onWindowBlur);
+}
+
+function onVisibilityChange() {
+  if (document.hidden && !state.examSubmitted) recordViolation('tab_switch', 'Candidate switched tabs or minimized the window.');
+}
+
+function onFullscreenChange() {
+  if (!document.fullscreenElement && !state.examSubmitted) {
+    recordViolation('fullscreen_exit', 'Candidate exited fullscreen mode.');
+    enterFullscreen(); // attempt to re-enforce
+  }
+}
+
+function onWindowBlur() {
+  if (!state.examSubmitted) recordViolation('window_blur', 'Exam window lost focus.');
+}
+
+function recordViolation(type, detail) {
+  state.violationCount++;
+  apiPost('logViolation', { examId: state.exam.examId, candidateId: state.user.userId, type, detail }).catch(() => {});
+  showViolationToast(detail);
+}
+
+function showViolationToast(detail) {
+  const toast = document.createElement('div');
+  toast.className = 'violation-toast';
+  toast.textContent = `⚠ Flagged: ${detail}`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ---------- SUBMIT ----------
+function confirmSubmit() {
+  const unanswered = state.questions.length - Object.keys(state.answers).length;
+  const warning = unanswered > 0 ? `You have ${unanswered} unanswered question(s). ` : '';
+  if (confirm(`${warning}Submit your exam now? This cannot be undone.`)) submitExam();
+}
+
+function autoSubmit() {
+  alert('Time is up. Your exam is being submitted automatically.');
+  submitExam();
+}
+
+async function submitExam() {
+  state.examSubmitted = true;
+  stopAllTimers();
+  detachProctoringListeners();
+
+  const answers = Object.entries(state.answers).map(([questionId, answer]) => ({ questionId, answer }));
+  try {
+    await apiPost('submitFinalAnswers', { examId: state.exam.examId, candidateId: state.user.userId, answers });
+  } catch (e) { /* local copy retained in localStorage regardless */ }
+
+  stopRecording();
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+
+  state.currentView = 'examSubmitted';
+  render();
+}
+
+function stopAllTimers() {
+  if (state.timerHandle) clearInterval(state.timerHandle);
+  if (state.syncHandle) clearInterval(state.syncHandle);
+  if (state.heartbeatHandle) clearInterval(state.heartbeatHandle);
+}
+
+function renderSubmitted() {
+  return `
+    <div class="card" style="text-align:center; padding:50px 20px;">
+      <div style="font-size:40px;">✅</div>
+      <h2>Exam submitted</h2>
+      <p class="sub">Your responses have been recorded. You may now close this window.</p>
+    </div>
+  `;
+}
+
+// ---------- UTIL ----------
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeAttr(str) { return escapeHtml(str).replace(/`/g, '&#96;'); }
+
+// ---------- INIT ----------
+window.addEventListener('beforeunload', (e) => {
+  if (state.currentView === 'exam' && !state.examSubmitted) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+render();
+</script>
+</body>
+</html>
