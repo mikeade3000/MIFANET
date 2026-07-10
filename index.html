@@ -272,6 +272,8 @@ const state = {
   mediaRecorder: null,
   recordedChunks: [],
   chunkIndex: 0,
+  recordingHealth: 'starting', // 'starting' | 'ok' | 'warning' | 'failed'
+  recordingFailCount: 0,
   violationCount: 0,
   examSubmitted: false
 };
@@ -958,6 +960,11 @@ function attachGateHandlers() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       state.mediaStream = stream;
+      stream.getTracks().forEach(track => {
+        track.addEventListener('ended', () => {
+          if (!state.examSubmitted) handleChunkUploadFailure(`${track.kind} track ended unexpectedly — device may have been disconnected or permission revoked.`);
+        });
+      });
       await enterFullscreen();
       beginExam();
     } catch (e) {
@@ -981,6 +988,8 @@ function beginExam() {
     : Number(state.exam.durationMinutes) * 60;
   state.violationCount = 0;
   state.examSubmitted = false;
+  state.recordingHealth = 'starting';
+  state.recordingFailCount = 0;
   state.currentView = 'exam';
   render();
 
@@ -1007,7 +1016,7 @@ function renderExam() {
 
   return `
     <div class="exam-topbar">
-      <div class="rec-indicator"><span class="rec-dot"></span> RECORDING — camera &amp; audio active</div>
+      <div class="rec-indicator" id="recIndicator">${renderRecIndicatorContent()}</div>
       <div class="timer" id="timerDisplay">--:--</div>
     </div>
     <div class="exam-shell">
@@ -1212,6 +1221,29 @@ function startHeartbeat() {
 }
 
 // ---------- RECORDING (camera/mic -> chunked upload to Drive) ----------
+function renderRecIndicatorContent() {
+  if (state.recordingHealth === 'ok') {
+    return `<span class="rec-dot"></span> RECORDING — camera &amp; audio active`;
+  }
+  if (state.recordingHealth === 'starting') {
+    return `<span class="rec-dot"></span> Starting recording…`;
+  }
+  if (state.recordingHealth === 'warning') {
+    return `<span class="rec-dot" style="background:#F5B041;"></span> Recording upload delayed — retrying`;
+  }
+  return `<span class="rec-dot" style="background:#F5B041; animation:none;"></span> ⚠ Recording issue detected — notify your invigilator`;
+}
+
+function updateRecIndicatorDOM() {
+  const el = document.getElementById('recIndicator');
+  if (el) el.innerHTML = renderRecIndicatorContent();
+}
+
+function setRecordingHealth(status) {
+  state.recordingHealth = status;
+  updateRecIndicatorDOM();
+}
+
 function startRecording() {
   if (!state.mediaStream) return;
   state.chunkIndex = 0;
@@ -1219,22 +1251,27 @@ function startRecording() {
 }
 
 function startNewRecorderSegment() {
-  const mimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
-  const mimeType = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
-  const recorder = new MediaRecorder(state.mediaStream, { mimeType });
-  const chunks = [];
+  try {
+    const mimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+    const mimeType = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+    const recorder = new MediaRecorder(state.mediaStream, { mimeType });
+    const chunks = [];
 
-  recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
-  recorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: mimeType });
-    await uploadChunk(blob, mimeType, state.chunkIndex);
-    state.chunkIndex++;
-    if (!state.examSubmitted) startNewRecorderSegment(); // continue recording next segment
-  };
+    recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    recorder.onerror = () => handleChunkUploadFailure('MediaRecorder reported an error mid-segment.');
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: mimeType });
+      await uploadChunk(blob, mimeType, state.chunkIndex);
+      state.chunkIndex++;
+      if (!state.examSubmitted) startNewRecorderSegment(); // continue recording next segment
+    };
 
-  recorder.start();
-  state.mediaRecorder = recorder;
-  setTimeout(() => { if (recorder.state !== 'inactive') recorder.stop(); }, RECORDING_CHUNK_SECONDS * 1000);
+    recorder.start();
+    state.mediaRecorder = recorder;
+    setTimeout(() => { if (recorder.state !== 'inactive') recorder.stop(); }, RECORDING_CHUNK_SECONDS * 1000);
+  } catch (e) {
+    handleChunkUploadFailure('Could not start a new recording segment: ' + e.message);
+  }
 }
 
 function stopRecording() {
@@ -1243,13 +1280,38 @@ function stopRecording() {
 }
 
 async function uploadChunk(blob, mimeType, chunkIndex) {
+  if (!blob || blob.size === 0) {
+    handleChunkUploadFailure('Recorded segment was empty (0 bytes) — camera/mic stream may have stopped.');
+    return;
+  }
   try {
     const base64Data = await blobToBase64(blob);
-    await apiPost('uploadRecordingChunk', {
+    const result = await apiPost('uploadRecordingChunk', {
       examId: state.exam.examId, candidateId: state.user.userId,
       chunkIndex, mimeType, base64Data
     });
-  } catch (e) { /* chunk upload failure is logged server-side as a gap; recording continues */ }
+    if (result && result.success) {
+      state.recordingFailCount = 0;
+      setRecordingHealth('ok');
+    } else {
+      handleChunkUploadFailure((result && result.error) || 'Backend rejected the recording chunk.');
+    }
+  } catch (e) {
+    handleChunkUploadFailure('Could not reach the server to upload the recording chunk: ' + e.message);
+  }
+}
+
+function handleChunkUploadFailure(detail) {
+  state.recordingFailCount++;
+  setRecordingHealth(state.recordingFailCount >= 3 ? 'failed' : 'warning');
+  // Best-effort audit trail — logged as a violation so examiners can see
+  // recording gaps during review, even though the exam itself is not halted.
+  if (state.exam && state.user) {
+    apiPost('logViolation', {
+      examId: state.exam.examId, candidateId: state.user.userId,
+      type: 'recording_upload_failed', detail
+    }).catch(() => {});
+  }
 }
 
 function blobToBase64(blob) {
