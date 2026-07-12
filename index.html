@@ -1486,12 +1486,17 @@ function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
+      // The data URL header itself can contain a comma when the MIME type
+      // includes a codecs list (e.g. "data:video/webm;codecs=vp8,opus;base64,<data>"),
+      // so splitting on ',' grabs a header fragment instead of the payload.
+      // Take everything after the "base64," marker instead.
+      const result = reader.result;
+      const marker = 'base64,';
+      const idx = result.indexOf(marker);
+      if (idx === -1) { reject(new Error('Unexpected data URL format from FileReader.')); return; }
+      const standard = result.slice(idx + marker.length);
       // Web-safe base64 (- and _ instead of + and /): the '+' character can
-      // be silently converted to a space by URL-style body processing in
-      // transit, corrupting the payload and making the backend's decode fail
-      // with "Could not decode string". The web-safe alphabet contains no
-      // '+' or '/', eliminating that failure mode entirely.
-      const standard = reader.result.split(',')[1];
+      // be silently converted to a space in transit, corrupting the payload.
       resolve(standard.replace(/\+/g, '-').replace(/\//g, '_'));
     };
     reader.onerror = reject;
