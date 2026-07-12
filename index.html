@@ -1352,7 +1352,28 @@ function setRecordingHealth(status) {
 // through the exact same pipeline real exam chunks use. Returns {ok, reason}.
 // This proves camera capture, encoding, base64 transport, Apps Script, and
 // Drive write all work end-to-end before the exam is allowed to begin.
+const REQUIRED_BACKEND_VERSION_PREFIX = 'v2.2';
+
 async function runRecordingPreflight() {
+  // Step 1: confirm the LIVE backend is running current code. A stale
+  // deployment is the most common cause of recording failures, so it is
+  // named explicitly rather than surfacing as a cryptic decode error.
+  try {
+    const ping = await apiGet('ping', {});
+    if (!ping || !ping.success) {
+      return { ok: false, reason: 'The server did not respond to a status check. Check the internet connection and the backend deployment.' };
+    }
+    if (!ping.version) {
+      return { ok: false, reason: 'The live backend is running OUTDATED code (no version marker found). The administrator must paste the latest Code.gs into Apps Script and create a NEW VERSION on this deployment (Deploy → Manage deployments → edit → Version: New version → Deploy). Saving the code alone does not update the live URL.' };
+    }
+    if (String(ping.version).indexOf(REQUIRED_BACKEND_VERSION_PREFIX) !== 0) {
+      return { ok: false, reason: `The live backend version is "${ping.version}" but this app requires ${REQUIRED_BACKEND_VERSION_PREFIX}. The administrator must paste the latest Code.gs and deploy a NEW VERSION on this deployment.` };
+    }
+  } catch (e) {
+    return { ok: false, reason: 'Could not reach the server for a status check: ' + e.message };
+  }
+
+  // Step 2: full end-to-end recording test.
   try {
     const mimeCandidates = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'];
     const mimeType = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
