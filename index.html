@@ -1464,7 +1464,15 @@ function handleChunkUploadFailure(detail) {
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.onloadend = () => {
+      // Web-safe base64 (- and _ instead of + and /): the '+' character can
+      // be silently converted to a space by URL-style body processing in
+      // transit, corrupting the payload and making the backend's decode fail
+      // with "Could not decode string". The web-safe alphabet contains no
+      // '+' or '/', eliminating that failure mode entirely.
+      const standard = reader.result.split(',')[1];
+      resolve(standard.replace(/\+/g, '-').replace(/\//g, '_'));
+    };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
