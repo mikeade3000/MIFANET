@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
     --navy: #0A3D62;
@@ -1001,19 +1002,16 @@ function attachExaminerHandlers() {
 
     html += '<div class="card"><h2>Proctoring recordings</h2>';
     if (recordingsRes.success && recordingsRes.recordings && recordingsRes.recordings.length) {
-      html += `<div class="sub">Each candidate's full session recording, in sequential segments. "Open folder" opens the candidate's recording folder in Google Drive — use Drive's <strong>Download all</strong> button there to download every segment as a single ZIP.</div>`;
+      html += `<div class="sub">Each candidate's full session recording. Click <strong>Download ZIP</strong> to download all of a candidate's segments as a single ZIP file directly — no Google Drive visit needed. Long sessions have many segments, so allow the progress counter to finish.</div>`;
       html += '<table><tr><th>Candidate</th><th>Segments</th><th>Recorded from</th><th>Until</th><th>Download</th></tr>';
       recordingsRes.recordings.forEach(rec => {
         const name = rec.fullName ? `${rec.fullName} (${rec.candidateId})` : rec.candidateId;
-        const link = rec.folderUrl
-          ? `<a href="${escapeAttr(rec.folderUrl)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="text-decoration:none;">Open folder</a>`
-          : '<span class="badge badge-warn">folder unavailable</span>';
         html += `<tr>
           <td>${escapeHtml(name)}</td>
           <td>${rec.chunkCount}</td>
           <td>${rec.firstAt ? new Date(rec.firstAt).toLocaleString() : '—'}</td>
           <td>${rec.lastAt ? new Date(rec.lastAt).toLocaleString() : '—'}</td>
-          <td>${link}</td>
+          <td><button class="btn btn-gold btn-sm dl-rec-btn" data-cid="${escapeAttr(rec.candidateId)}">Download ZIP</button></td>
         </tr>`;
       });
       html += '</table>';
@@ -1050,7 +1048,73 @@ function attachExaminerHandlers() {
         downloadCSV(`exam_report_${examId}.csv`, lines.join('\n'));
       };
     }
+
+    // Direct ZIP download of a candidate's full recording
+    document.querySelectorAll('.dl-rec-btn').forEach(btn => {
+      btn.onclick = () => downloadCandidateRecordingZip(examId, btn.dataset.cid, btn);
+    });
   };
+}
+
+function base64WebSafeToUint8(b64) {
+  let s = b64.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// Fetches every recording segment through the backend API and assembles
+// them into one ZIP in the browser — the examiner never touches Drive, and
+// the recordings never need to be link-shared. Segments are fetched a few
+// at a time with a live progress counter on the button.
+async function downloadCandidateRecordingZip(examId, candidateId, btn) {
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  try {
+    if (typeof JSZip === 'undefined') throw new Error('ZIP library did not load — check the internet connection and reload the page.');
+
+    btn.textContent = 'Fetching list…';
+    const listRes = await apiGet('getRecordingFiles', { examId, candidateId });
+    if (!listRes.success || !listRes.files || !listRes.files.length) {
+      throw new Error(listRes.error || 'No recording segments found.');
+    }
+
+    const files = listRes.files;
+    const zip = new JSZip();
+    let done = 0;
+    btn.textContent = `Preparing 0/${files.length}…`;
+
+    const CONCURRENCY = 3;
+    let nextIndex = 0;
+    async function worker() {
+      while (nextIndex < files.length) {
+        const f = files[nextIndex++];
+        const res = await apiGet('getRecordingChunkData', { examId, candidateId, fileId: f.fileId });
+        if (!res.success) throw new Error(res.error || ('Segment ' + f.chunkIndex + ' could not be fetched.'));
+        zip.file(res.name, base64WebSafeToUint8(res.dataBase64));
+        done++;
+        btn.textContent = `Preparing ${done}/${files.length}…`;
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+
+    btn.textContent = 'Zipping…';
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recording_${examId}_${candidateId}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    btn.textContent = 'Downloaded ✓';
+    setTimeout(() => { btn.textContent = originalLabel; btn.disabled = false; }, 3000);
+  } catch (e) {
+    btn.textContent = 'Failed — retry';
+    btn.disabled = false;
+    alert('Recording download failed: ' + e.message);
+  }
 }
 
 // ---------- CANDIDATE HOME ----------
@@ -1442,7 +1506,7 @@ function setRecordingHealth(status) {
 // through the exact same pipeline real exam chunks use. Returns {ok, reason}.
 // This proves camera capture, encoding, base64 transport, Apps Script, and
 // Drive write all work end-to-end before the exam is allowed to begin.
-const REQUIRED_BACKEND_VERSION_PREFIX = 'v2.4';
+const REQUIRED_BACKEND_VERSION_PREFIX = 'v2.5';
 
 async function runRecordingPreflight() {
   // Step 1: confirm the LIVE backend is running current code. A stale
