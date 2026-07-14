@@ -1671,6 +1671,11 @@ async function runRecordingPreflight() {
       return { ok: false, reason: 'The live backend is running OUTDATED code (no version marker found). The administrator must paste the latest Code.gs into Apps Script and create a NEW VERSION on this deployment (Deploy → Manage deployments → edit → Version: New version → Deploy). Saving the code alone does not update the live URL.' };
     }
     if (String(ping.version).indexOf(REQUIRED_BACKEND_VERSION_PREFIX) !== 0) {
+      const serverNum = parseFloat(String(ping.version).replace(/^v/, ''));
+      const requiredNum = parseFloat(REQUIRED_BACKEND_VERSION_PREFIX.replace(/^v/, ''));
+      if (!isNaN(serverNum) && !isNaN(requiredNum) && serverNum > requiredNum) {
+        return { ok: false, reason: `This PAGE is outdated, not the server. The server is running "${ping.version}" but this page is an older app version requiring ${REQUIRED_BACKEND_VERSION_PREFIX}. The administrator should upload the latest index.html to the website; candidates should hard-refresh this page (Ctrl+F5) to clear the cached old version.` };
+      }
       return { ok: false, reason: `The live backend version is "${ping.version}" but this app requires ${REQUIRED_BACKEND_VERSION_PREFIX}. The administrator must paste the latest Code.gs and deploy a NEW VERSION on this deployment.` };
     }
   } catch (e) {
