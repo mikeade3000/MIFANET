@@ -205,6 +205,18 @@
   .empty-state { text-align: center; padding: 40px 20px; color: var(--ink-soft); }
   .hidden { display: none !important; }
 
+  /* ---------- Consent & snapshots ---------- */
+  .consent-check { display: flex; gap: 10px; align-items: flex-start; text-align: left; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 14px 16px; margin: 16px 0; font-size: 13.5px; color: #DCE7F0; }
+  .consent-check input { margin-top: 3px; flex-shrink: 0; }
+  .snap-video { width: 100%; max-width: 420px; border-radius: 10px; background: #000; aspect-ratio: 4/3; object-fit: cover; }
+  .snap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+  .snap-slot { background: rgba(255,255,255,0.06); border: 1px dashed #4A6B87; border-radius: 8px; padding: 8px; text-align: center; }
+  .snap-slot.filled { border-style: solid; border-color: var(--gold); }
+  .snap-slot img { width: 100%; border-radius: 6px; aspect-ratio: 4/3; object-fit: cover; }
+  .snap-slot .slot-label { font-size: 11.5px; color: #C7D6E3; margin: 6px 0 4px; font-weight: 600; }
+  .snap-slot .slot-empty { aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; color: #4A6B87; font-size: 26px; }
+  .snap-retake { background: none; border: none; color: var(--gold-light); font-size: 11.5px; text-decoration: underline; cursor: pointer; padding: 2px; }
+
   /* ---------- Bulk upload ---------- */
   .bulk-instructions {
     background: #EAF1F7; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--ink); margin-bottom: 14px; line-height: 1.6;
@@ -245,7 +257,7 @@ const HEARTBEAT_INTERVAL_MS = 45000;
 // decision (accept, review recording, invalidate, allow retake) belongs to the
 // examiner. Technical problems (e.g. recording upload failures) are logged
 // separately and never attributed to candidate conduct.
-const CONDUCT_VIOLATION_TYPES = ['tab_switch', 'fullscreen_exit', 'window_blur'];
+const CONDUCT_VIOLATION_TYPES = ['tab_switch', 'fullscreen_exit', 'window_blur', 'left_window_frame'];
 
 // Bootstrap admin credential — lets you into the Admin panel before the
 // Apps Script backend is deployed or before setupSheetsAndFolders has been
@@ -273,6 +285,10 @@ const state = {
   bulkQuestionRows: [],
   serverRemainingSec: null,
   isResumedSession: false,
+  gateStep: 'consent',        // 'consent' | 'snapshots'
+  snapshots: {},              // slot key -> JPEG data URL
+  geoPosition: null,          // {latitude, longitude, accuracy}
+  lastFrameLeaveAt: 0,
   timeRemainingSec: 0,
   timerHandle: null,
   syncHandle: null,
@@ -1002,8 +1018,9 @@ function attachExaminerHandlers() {
 
     html += '<div class="card"><h2>Proctoring recordings</h2>';
     if (recordingsRes.success && recordingsRes.recordings && recordingsRes.recordings.length) {
-      html += `<div class="sub">Each candidate's full session recording. Click <strong>Download ZIP</strong> to download all of a candidate's segments as a single ZIP file directly — no Google Drive visit needed. Long sessions have many segments, so allow the progress counter to finish.</div>`;
-      html += '<table><tr><th>Candidate</th><th>Segments</th><th>Recorded from</th><th>Until</th><th>Download</th></tr>';
+      html += `<div class="sub">All candidates' full session recordings for this exam, downloaded as ONE ZIP file directly — no Google Drive visit needed. Inside the ZIP, every candidate has their own folder containing their segments. Large exams have many segments, so allow the progress counter to finish.</div>`;
+      html += '<button class="btn btn-gold btn-sm" id="downloadAllRecBtn" style="margin-bottom:14px;">Download ALL recordings for this exam (ZIP)</button>';
+      html += '<table><tr><th>Candidate</th><th>Segments</th><th>Recorded from</th><th>Until</th></tr>';
       recordingsRes.recordings.forEach(rec => {
         const name = rec.fullName ? `${rec.fullName} (${rec.candidateId})` : rec.candidateId;
         html += `<tr>
@@ -1011,7 +1028,6 @@ function attachExaminerHandlers() {
           <td>${rec.chunkCount}</td>
           <td>${rec.firstAt ? new Date(rec.firstAt).toLocaleString() : '—'}</td>
           <td>${rec.lastAt ? new Date(rec.lastAt).toLocaleString() : '—'}</td>
-          <td><button class="btn btn-gold btn-sm dl-rec-btn" data-cid="${escapeAttr(rec.candidateId)}">Download ZIP</button></td>
         </tr>`;
       });
       html += '</table>';
@@ -1036,23 +1052,28 @@ function attachExaminerHandlers() {
     const dlBtn = document.getElementById('downloadReportBtn');
     if (dlBtn) {
       dlBtn.onclick = () => {
-        const header = ['candidateId', 'fullName', 'username', 'status', 'startedAt', 'score', 'maxScore', 'answered', 'conductViolations', 'technicalIssues', 'suggestedAction'];
+        const qLabels = (reportRes.questionKey || []).map(k => k.label);
+        const header = ['candidateId', 'fullName', 'username', 'status', 'startedAt', 'score', 'maxScore', 'answered', 'conductViolations', 'technicalIssues', 'suggestedAction'].concat(qLabels);
         const lines = [header.join(',')];
         reportRes.report.forEach(r => {
           const rec = recommendedAction(Number(r.conductViolations) || 0);
+          const perQ = qLabels.map(l => (r.perQuestion && r.perQuestion[l] !== undefined) ? r.perQuestion[l] : '');
           lines.push([
             r.candidateId, r.fullName, r.username, r.status, r.startedAt,
             r.score, r.maxScore, r.answered, r.conductViolations, r.technicalIssues, rec.label
-          ].map(csvEscape).join(','));
+          ].concat(perQ).map(csvEscape).join(','));
         });
         downloadCSV(`exam_report_${examId}.csv`, lines.join('\n'));
       };
     }
 
-    // Direct ZIP download of a candidate's full recording
-    document.querySelectorAll('.dl-rec-btn').forEach(btn => {
-      btn.onclick = () => downloadCandidateRecordingZip(examId, btn.dataset.cid, btn);
-    });
+    // Exam-wide ZIP of every candidate's recordings, one folder each
+    const allRecBtn = document.getElementById('downloadAllRecBtn');
+    if (allRecBtn) {
+      const nameByCid = {};
+      (recordingsRes.recordings || []).forEach(r => { nameByCid[r.candidateId] = r.fullName || ''; });
+      allRecBtn.onclick = () => downloadExamRecordingsZip(examId, nameByCid, allRecBtn);
+    }
   };
 }
 
@@ -1065,24 +1086,28 @@ function base64WebSafeToUint8(b64) {
   return bytes;
 }
 
-// Fetches every recording segment through the backend API and assembles
-// them into one ZIP in the browser — the examiner never touches Drive, and
-// the recordings never need to be link-shared. Segments are fetched a few
-// at a time with a live progress counter on the button.
-async function downloadCandidateRecordingZip(examId, candidateId, btn) {
+// Fetches every recording segment for the WHOLE exam through the backend
+// API and assembles one ZIP in the browser, with a folder per candidate —
+// the examiner never touches Drive, and recordings are never link-shared.
+async function downloadExamRecordingsZip(examId, nameByCid, btn) {
   const originalLabel = btn.textContent;
   btn.disabled = true;
   try {
     if (typeof JSZip === 'undefined') throw new Error('ZIP library did not load — check the internet connection and reload the page.');
 
-    btn.textContent = 'Fetching list…';
-    const listRes = await apiGet('getRecordingFiles', { examId, candidateId });
+    btn.textContent = 'Fetching file list…';
+    const listRes = await apiGet('getExamRecordingFiles', { examId });
     if (!listRes.success || !listRes.files || !listRes.files.length) {
-      throw new Error(listRes.error || 'No recording segments found.');
+      throw new Error(listRes.error || 'No recording segments found for this exam.');
     }
 
     const files = listRes.files;
     const zip = new JSZip();
+    const folderFor = {};
+    const folderName = (cid) => {
+      const nm = (nameByCid[cid] || '').replace(/[^\w -]/g, '').trim();
+      return nm ? `${nm}_${cid}` : cid;
+    };
     let done = 0;
     btn.textContent = `Preparing 0/${files.length}…`;
 
@@ -1091,9 +1116,10 @@ async function downloadCandidateRecordingZip(examId, candidateId, btn) {
     async function worker() {
       while (nextIndex < files.length) {
         const f = files[nextIndex++];
-        const res = await apiGet('getRecordingChunkData', { examId, candidateId, fileId: f.fileId });
-        if (!res.success) throw new Error(res.error || ('Segment ' + f.chunkIndex + ' could not be fetched.'));
-        zip.file(res.name, base64WebSafeToUint8(res.dataBase64));
+        const res = await apiGet('getRecordingChunkData', { examId, candidateId: f.candidateId, fileId: f.fileId });
+        if (!res.success) throw new Error(res.error || ('A segment for ' + f.candidateId + ' could not be fetched.'));
+        if (!folderFor[f.candidateId]) folderFor[f.candidateId] = zip.folder(folderName(f.candidateId));
+        folderFor[f.candidateId].file(res.name, base64WebSafeToUint8(res.dataBase64));
         done++;
         btn.textContent = `Preparing ${done}/${files.length}…`;
       }
@@ -1105,7 +1131,7 @@ async function downloadCandidateRecordingZip(examId, candidateId, btn) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `recording_${examId}_${candidateId}.zip`;
+    a.download = `recordings_${examId}.zip`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
     btn.textContent = 'Downloaded ✓';
@@ -1151,42 +1177,111 @@ function attachCandidateHomeHandlers() {
     const saved = localLoadAnswers();
     if (saved) { state.answers = saved.answers || {}; }
 
+    state.gateStep = 'consent';
+    state.snapshots = {};
+    state.geoPosition = null;
     state.currentView = 'permissionGate';
     render();
   };
 }
 
-// ---------- PERMISSION GATE (camera/mic) ----------
+// ---------- PERMISSION GATE (consent -> snapshots -> preflight) ----------
+const SNAPSHOT_SLOTS = [
+  { key: 'face', label: 'Your face' },
+  { key: 'system_back', label: 'Back of your system' },
+  { key: 'right_side', label: 'Right side of your location' },
+  { key: 'left_side', label: 'Left side of your location' }
+];
+
 function renderPermissionGate() {
+  if (state.gateStep === 'snapshots') return renderSnapshotStep();
   return `
     <div class="gate-overlay">
       <div class="gate-card">
-        <div class="gate-icon">🎥</div>
-        <h2>Camera &amp; microphone required</h2>
-        <p>${escapeHtml(state.exam.title)} must be taken with your camera and microphone active for the full duration. Recording begins automatically once you continue and cannot be paused or disabled.</p>
+        <div class="gate-icon">\u{1F3A5}</div>
+        <h2>Consent required before this exam</h2>
+        <p>${escapeHtml(state.exam.title)} is a proctored examination. Before proceeding, you must consent to ALL of the following being collected and used for examination-integrity purposes:</p>
         <ul class="gate-list">
-          <li>Ensure you are alone, in a quiet, well-lit room.</li>
-          <li>Keep your face visible in the camera frame throughout.</li>
-          <li>The exam will run in fullscreen. Exiting fullscreen or switching tabs is logged as a violation.</li>
-          <li>You will not be able to start the exam without granting access.</li>
+          <li><strong>Pictures:</strong> snapshots of you and your surroundings, taken before the exam begins.</li>
+          <li><strong>Video recording:</strong> your camera is recorded for the full duration of the exam.</li>
+          <li><strong>Audio recording:</strong> your microphone is recorded for the full duration of the exam.</li>
+          <li><strong>Geographical location:</strong> your location at the time of the exam is captured once.</li>
+          <li>The exam runs in fullscreen. Exiting fullscreen, switching tabs, or moving away from the exam window is logged as a violation.</li>
         </ul>
-        <button class="btn btn-gold" id="grantAccessBtn" style="width:100%;">Enable camera &amp; microphone to continue</button>
+        <label class="consent-check">
+          <input type="checkbox" id="consentCheckbox" />
+          <span>I consent to the use of my pictures, video recording, audio recording, and geographical location for the purposes of this examination, and I understand the exam cannot begin without this consent.</span>
+        </label>
+        <button class="btn btn-gold" id="grantAccessBtn" style="width:100%;">I accept \u2014 enable camera, microphone &amp; location</button>
         <div id="gateError" style="margin-top:14px;"></div>
       </div>
     </div>
   `;
 }
 
+function renderSnapshotStep() {
+  const allCaptured = SNAPSHOT_SLOTS.every(s => state.snapshots[s.key]);
+  const nextSlot = SNAPSHOT_SLOTS.find(s => !state.snapshots[s.key]);
+  const slots = SNAPSHOT_SLOTS.map(s => {
+    const img = state.snapshots[s.key];
+    return `<div class="snap-slot ${img ? 'filled' : ''}">
+      ${img ? `<img src="${img}" alt="${escapeAttr(s.label)}" />` : `<div class="slot-empty">\u{1F4F7}</div>`}
+      <div class="slot-label">${escapeHtml(s.label)}</div>
+      ${img ? `<button class="snap-retake" data-key="${escapeAttr(s.key)}">Retake</button>` : ''}
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="gate-overlay">
+      <div class="gate-card" style="max-width:560px;">
+        <h2>Pre-exam snapshots</h2>
+        <p>Using your camera, capture the four required snapshots. Position the camera (or turn your device) so each shot clearly shows what is asked, then press Capture.</p>
+        <video id="snapVideo" class="snap-video" autoplay muted playsinline></video>
+        <div class="snap-grid">${slots}</div>
+        ${allCaptured
+          ? `<button class="btn btn-gold" id="submitSnapshotsBtn" style="width:100%;">Submit snapshots &amp; continue to exam</button>`
+          : `<button class="btn btn-gold" id="captureSnapBtn" style="width:100%;">Capture: ${escapeHtml(nextSlot.label)}</button>`}
+        <div id="gateError" style="margin-top:14px;"></div>
+      </div>
+    </div>
+  `;
+}
+
+function getGeolocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocation is not supported by this browser.')); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      err => reject(new Error(err.message || 'Location permission was denied.')),
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 }
+    );
+  });
+}
+
 function attachGateHandlers() {
+  if (state.gateStep === 'snapshots') { attachSnapshotHandlers(); return; }
+
   document.getElementById('grantAccessBtn').onclick = async () => {
     const errEl = document.getElementById('gateError');
     errEl.innerHTML = '';
+
+    if (!document.getElementById('consentCheckbox').checked) {
+      errEl.innerHTML = `<div class="error-msg">You must tick the consent box before continuing. The exam cannot begin without your consent.</div>`;
+      return;
+    }
+
     try {
-      // Resolution/frame-rate are deliberately capped: this keeps each recorded
-      // segment small enough to upload reliably over the variable connectivity
-      // candidates may have across Lagos State, without materially reducing
-      // proctoring usefulness (a small, low-frame-rate feed is still enough to
-      // verify identity and detect a second person in frame).
+      errEl.innerHTML = '<div class="sub" style="color:#C7D6E3;">Requesting your location\u2026</div>';
+      state.geoPosition = await getGeolocation();
+    } catch (e) {
+      errEl.innerHTML = `<div class="error-msg">Location access is required and was not granted: ${escapeHtml(e.message)}. Enable location for this site and try again.</div>`;
+      return;
+    }
+
+    try {
+      errEl.innerHTML = '<div class="sub" style="color:#C7D6E3;">Requesting camera and microphone\u2026</div>';
+      // Resolution/frame-rate deliberately capped for reliable uploads on
+      // variable connectivity, without reducing proctoring usefulness.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640, max: 640 }, height: { ideal: 480, max: 480 }, frameRate: { ideal: 15, max: 15 } },
         audio: true
@@ -1194,28 +1289,83 @@ function attachGateHandlers() {
       state.mediaStream = stream;
       stream.getTracks().forEach(track => {
         track.addEventListener('ended', () => {
-          if (!state.examSubmitted) handleChunkUploadFailure(`${track.kind} track ended unexpectedly — device may have been disconnected or permission revoked.`);
+          if (!state.examSubmitted) handleChunkUploadFailure(`${track.kind} track ended unexpectedly \u2014 device may have been disconnected or permission revoked.`);
         });
       });
 
-      // Preflight: record and upload a short test clip BEFORE the exam
-      // begins, so a broken recording/upload path is caught loudly now,
-      // not silently mid-exam.
-      errEl.innerHTML = '<div class="sub" style="color:#C7D6E3;">Testing your camera recording and upload… this takes a few seconds.</div>';
-      const preflight = await runRecordingPreflight();
-      if (!preflight.ok) {
-        state.mediaStream.getTracks().forEach(t => t.stop());
-        state.mediaStream = null;
-        errEl.innerHTML = `<div class="error-msg">Recording system check failed: ${preflight.reason}<br><br>Please notify your invigilator, check your internet connection, and press the button above to try again. The exam cannot begin until this check passes.</div>`;
-        return;
-      }
-
-      await enterFullscreen();
-      beginExam();
+      state.snapshots = {};
+      state.gateStep = 'snapshots';
+      render();
     } catch (e) {
-      errEl.innerHTML = `<div class="error-msg">Camera/microphone access was denied or unavailable. You must grant access to begin the exam. (${e.message})</div>`;
+      errEl.innerHTML = `<div class="error-msg">Camera/microphone access was denied or unavailable. You must grant access to begin the exam. (${escapeHtml(e.message)})</div>`;
     }
   };
+}
+
+function attachSnapshotHandlers() {
+  const videoEl = document.getElementById('snapVideo');
+  if (videoEl && state.mediaStream) videoEl.srcObject = state.mediaStream;
+
+  document.querySelectorAll('.snap-retake').forEach(btn => {
+    btn.onclick = () => { delete state.snapshots[btn.dataset.key]; render(); };
+  });
+
+  const captureBtn = document.getElementById('captureSnapBtn');
+  if (captureBtn) {
+    captureBtn.onclick = () => {
+      const nextSlot = SNAPSHOT_SLOTS.find(s => !state.snapshots[s.key]);
+      if (!nextSlot || !videoEl || !videoEl.videoWidth) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      canvas.getContext('2d').drawImage(videoEl, 0, 0);
+      state.snapshots[nextSlot.key] = canvas.toDataURL('image/jpeg', 0.75);
+      render();
+    };
+  }
+
+  const submitBtn = document.getElementById('submitSnapshotsBtn');
+  if (submitBtn) {
+    submitBtn.onclick = async () => {
+      const errEl = document.getElementById('gateError');
+      errEl.innerHTML = '';
+      submitBtn.disabled = true;
+      try {
+        submitBtn.textContent = 'Saving consent\u2026';
+        const consentRes = await apiPost('recordConsent', {
+          examId: state.exam.examId, candidateId: state.user.userId,
+          latitude: state.geoPosition ? state.geoPosition.latitude : '',
+          longitude: state.geoPosition ? state.geoPosition.longitude : '',
+          accuracy: state.geoPosition ? state.geoPosition.accuracy : ''
+        });
+        if (!consentRes || !consentRes.success) throw new Error((consentRes && consentRes.error) || 'Consent could not be saved.');
+
+        for (let i = 0; i < SNAPSHOT_SLOTS.length; i++) {
+          const slot = SNAPSHOT_SLOTS[i];
+          submitBtn.textContent = `Uploading snapshot ${i + 1}/${SNAPSHOT_SLOTS.length}\u2026`;
+          const dataUrl = state.snapshots[slot.key];
+          const marker = 'base64,';
+          const b64 = dataUrl.slice(dataUrl.indexOf(marker) + marker.length).replace(/\+/g, '-').replace(/\//g, '_');
+          const upRes = await apiPost('uploadSnapshot', {
+            examId: state.exam.examId, candidateId: state.user.userId,
+            label: slot.key, imageBase64: b64, mimeType: 'image/jpeg'
+          }, 45000);
+          if (!upRes || !upRes.success) throw new Error((upRes && upRes.error) || `Snapshot "${slot.label}" failed to upload.`);
+        }
+
+        submitBtn.textContent = 'Testing recording\u2026';
+        const preflight = await runRecordingPreflight();
+        if (!preflight.ok) throw new Error(preflight.reason);
+
+        await enterFullscreen();
+        beginExam();
+      } catch (e) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit snapshots & continue to exam';
+        errEl.innerHTML = `<div class="error-msg">${escapeHtml(e.message)}<br><br>Please notify your invigilator, check your connection, and try again.</div>`;
+      }
+    };
+  }
 }
 
 async function enterFullscreen() {
@@ -1506,7 +1656,7 @@ function setRecordingHealth(status) {
 // through the exact same pipeline real exam chunks use. Returns {ok, reason}.
 // This proves camera capture, encoding, base64 transport, Apps Script, and
 // Drive write all work end-to-end before the exam is allowed to begin.
-const REQUIRED_BACKEND_VERSION_PREFIX = 'v2.5';
+const REQUIRED_BACKEND_VERSION_PREFIX = 'v2.6';
 
 async function runRecordingPreflight() {
   // Step 1: confirm the LIVE backend is running current code. A stale
@@ -1663,12 +1813,14 @@ function attachProctoringListeners() {
   document.addEventListener('visibilitychange', onVisibilityChange);
   document.addEventListener('fullscreenchange', onFullscreenChange);
   window.addEventListener('blur', onWindowBlur);
+  document.documentElement.addEventListener('mouseleave', onFrameLeave);
 }
 
 function detachProctoringListeners() {
   document.removeEventListener('visibilitychange', onVisibilityChange);
   document.removeEventListener('fullscreenchange', onFullscreenChange);
   window.removeEventListener('blur', onWindowBlur);
+  document.documentElement.removeEventListener('mouseleave', onFrameLeave);
 }
 
 function onVisibilityChange() {
@@ -1684,6 +1836,17 @@ function onFullscreenChange() {
 
 function onWindowBlur() {
   if (!state.examSubmitted) recordViolation('window_blur', 'Exam window lost focus.');
+}
+
+// Fires when the pointer moves outside the exam window's frame. Debounced
+// to at most one violation per 10 seconds so a single wander doesn't stack
+// multiple flags.
+function onFrameLeave() {
+  if (state.examSubmitted) return;
+  const now = Date.now();
+  if (now - state.lastFrameLeaveAt < 10000) return;
+  state.lastFrameLeaveAt = now;
+  recordViolation('left_window_frame', 'Candidate moved away from the frame of the exam window.');
 }
 
 function recordViolation(type, detail) {
