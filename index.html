@@ -133,6 +133,7 @@
   .gate-overlay {
     position: fixed; inset: 0; background: var(--navy-dark); z-index: 999;
     display: flex; align-items: center; justify-content: center; color: #fff;
+    overflow-y: auto; padding: 16px; box-sizing: border-box;
   }
   .gate-card { max-width: 480px; padding: 40px; text-align: center; }
   .gate-icon { font-size: 44px; margin-bottom: 14px; }
@@ -222,6 +223,41 @@
   .snap-slot img { width: 100%; border-radius: 6px; aspect-ratio: 4/3; object-fit: cover; }
   .snap-slot .slot-label { font-size: 11.5px; color: #C7D6E3; margin: 6px 0 4px; font-weight: 600; }
   .snap-slot .slot-empty { aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; color: #4A6B87; font-size: 26px; }
+
+  /* ---------- Snapshot step: fit-everything-on-one-screen layout ----------
+     Everything on this step is sized against the viewport HEIGHT (svh/vh),
+     so the camera preview, all four slots, and the Capture button are always
+     visible together without scrolling or zooming, on any device. */
+  .snap-card {
+    max-width: 620px; width: 100%; margin: auto;
+    display: flex; flex-direction: column;
+    max-height: 96vh; max-height: 96svh; box-sizing: border-box; padding: 2.2vh 24px; padding: 2.2svh 24px;
+  }
+  .snap-card h2 { margin: 0 0 0.4vh; margin: 0 0 0.4svh; font-size: clamp(17px, 2.4vh, 22px); font-size: clamp(17px, 2.4svh, 22px); }
+  .snap-card .snap-intro {
+    color: #C7D6E3; line-height: 1.4; margin: 0 0 1.2vh; margin: 0 0 1.2svh;
+    font-size: clamp(11px, 1.7vh, 14px); font-size: clamp(11px, 1.7svh, 14px);
+  }
+  /* Camera preview flexes with available height but never dominates a small
+     screen; capped so the slots + button always have room beneath it. */
+  .snap-card .snap-video {
+    max-width: none; width: auto; max-height: 38vh; max-height: 38svh; aspect-ratio: 4/3;
+    margin: 0 auto; flex: 0 1 auto; min-height: 120px;
+  }
+  /* Four slots in ONE row so the step stays short vertically. */
+  .snap-card .snap-grid {
+    grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 1.2vh 0; margin: 1.2svh 0;
+  }
+  .snap-card .snap-slot { padding: 6px; }
+  .snap-card .snap-slot .slot-label { font-size: clamp(9px, 1.4vh, 11.5px); font-size: clamp(9px, 1.4svh, 11.5px); margin: 4px 0 2px; line-height: 1.2; }
+  .snap-card .snap-slot .slot-empty { font-size: clamp(18px, 3vh, 26px); font-size: clamp(18px, 3svh, 26px); }
+  .snap-card .snap-retake { font-size: clamp(9px, 1.4vh, 11.5px); font-size: clamp(9px, 1.4svh, 11.5px); }
+  .snap-card .btn { padding: clamp(9px, 1.6vh, 14px); padding: clamp(9px, 1.6svh, 14px); font-size: clamp(13px, 1.9vh, 15px); font-size: clamp(13px, 1.9svh, 15px); }
+  /* On very narrow phones, 4 across gets cramped — drop to 2 x 2, still short. */
+  @media (max-width: 430px) {
+    .snap-card .snap-grid { grid-template-columns: repeat(2, 1fr); }
+    .snap-card .snap-video { max-height: 32vh; max-height: 32svh; }
+  }
   .snap-retake { background: none; border: none; color: var(--gold-light); font-size: 11.5px; text-decoration: underline; cursor: pointer; padding: 2px; }
 
   /* ---------- Bulk upload ---------- */
@@ -1167,7 +1203,7 @@ function attachExaminerHandlers() {
 
     html += '<div class="card"><h2>Proctoring recordings</h2>';
     if (recordingsRes.success && recordingsRes.recordings && recordingsRes.recordings.length) {
-      html += `<div class="sub">All candidates' full session recordings for this exam, downloaded as ONE ZIP file directly. Inside the ZIP, every candidate has their own folder containing their segments. Large exams have many segments, so allow the progress counter to finish.</div>`;
+      html += `<div class="sub">All candidates' full session recordings for this exam, downloaded as ONE ZIP file directly — no Google Drive visit needed. Inside the ZIP, every candidate has their own folder containing their segments. Large exams have many segments, so allow the progress counter to finish.</div>`;
       html += '<button class="btn btn-gold btn-sm" id="downloadAllRecBtn" style="margin-bottom:14px;">Download ALL recordings for this exam (ZIP)</button>';
       html += '<table><tr><th>Candidate</th><th>Segments</th><th>Recorded from</th><th>Until</th></tr>';
       recordingsRes.recordings.forEach(rec => {
@@ -1466,15 +1502,15 @@ function renderSnapshotStep() {
 
   return `
     <div class="gate-overlay">
-      <div class="gate-card" style="max-width:560px;">
+      <div class="gate-card snap-card">
         <h2>Pre-exam snapshots</h2>
-        <p>Using your camera, capture the four required snapshots. Position the camera (or turn your device) so each shot clearly shows what is asked, then press Capture.</p>
+        <p class="snap-intro">Using your camera, capture the four required snapshots. Position the camera (or turn your device) so each shot clearly shows what is asked, then press Capture.</p>
         <video id="snapVideo" class="snap-video" autoplay muted playsinline></video>
         <div class="snap-grid">${slots}</div>
         ${allCaptured
           ? `<button class="btn btn-gold" id="submitSnapshotsBtn" style="width:100%;">Submit snapshots &amp; continue to exam</button>`
           : `<button class="btn btn-gold" id="captureSnapBtn" style="width:100%;">Capture: ${escapeHtml(nextSlot.label)}</button>`}
-        <div id="gateError" style="margin-top:14px;"></div>
+        <div id="gateError" style="margin-top:8px;"></div>
       </div>
     </div>
   `;
