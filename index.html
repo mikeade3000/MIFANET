@@ -380,6 +380,27 @@ async function apiGet(action, params) {
   return res.json();
 }
 
+// Stable identifier for THIS device/browser, persisted locally. Used to bind
+// an in-progress exam to the device that started it, so the same login
+// details cannot be used to sit the exam on several machines at once. It is
+// not sensitive — just a random tag to tell one device from another.
+function getDeviceId() {
+  const KEY = 'pssdc_device_id';
+  try {
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch (e) {
+    // localStorage unavailable — fall back to a per-tab id (still distinguishes
+    // this browser instance from another during the session).
+    if (!window.__pssdcDeviceId) window.__pssdcDeviceId = 'dev_tab_' + Math.random().toString(36).slice(2, 12);
+    return window.__pssdcDeviceId;
+  }
+}
+
 function detectDevice() {
   const ua = navigator.userAgent;
   let os = 'Unknown OS';
@@ -1430,8 +1451,13 @@ function attachCandidateHomeHandlers() {
   document.getElementById('startExamBtn').onclick = async () => {
     const examId = val('candExamId');
     if (!examId) return;
-    const result = await apiGet('getExamForCandidate', { examId, candidateId: state.user.userId });
-    if (!result.success) { msg('startExamMsg', result.error || 'Exam not found.', true); return; }
+    const result = await apiGet('getExamForCandidate', { examId, candidateId: state.user.userId, deviceId: getDeviceId() });
+    if (!result.success) {
+      // A refusal because the details are already in use / already submitted
+      // is shown prominently, since it means the candidate cannot proceed.
+      msg('startExamMsg', result.error || 'Exam not found.', true);
+      return;
+    }
     if (!result.questions || result.questions.length === 0) {
       msg('startExamMsg', 'This exam has no questions yet. Contact your exam administrator — questions may not have been added, or may have been added under a different exam ID.', true);
       return;
@@ -1631,7 +1657,7 @@ function attachSnapshotHandlers() {
         if (!preflight.ok) throw new Error(preflight.reason);
 
         await enterFullscreen();
-        beginExam();
+        await beginExam();
       } catch (e) {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Submit snapshots & continue to exam';
@@ -1650,7 +1676,7 @@ async function enterFullscreen() {
 }
 
 // ---------- EXAM FLOW ----------
-function beginExam() {
+async function beginExam() {
   state.timeRemainingSec = state.serverRemainingSec !== null && state.serverRemainingSec !== undefined
     ? state.serverRemainingSec
     : Number(state.exam.durationMinutes) * 60;
@@ -1664,7 +1690,22 @@ function beginExam() {
   if (state.isResumedSession) showViolationToast('Resuming your exam with your remaining time — the clock did not reset.');
 
   audit('exam_started', 'Exam "' + state.exam.title + '" started; lockdown engaged', state.exam.examId);
-  apiPost('startSession', { examId: state.exam.examId, candidateId: state.user.userId });
+  const claim = await apiPost('startSession', { examId: state.exam.examId, candidateId: state.user.userId, deviceId: getDeviceId() });
+  if (claim && claim.success === false && (claim.alreadyInUse || claim.alreadySubmitted)) {
+    // A duplicate slipped in during consent/snapshots — refuse before any
+    // question is shown, release everything, and send the candidate back.
+    stopAllTimers();
+    detachProctoringListeners();
+    disengageLockdown();
+    stopRecording();
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    if (state.mediaStream) { state.mediaStream.getTracks().forEach(t => t.stop()); state.mediaStream = null; }
+    state.examSubmitted = true;
+    state.currentView = 'candidateHome';
+    render();
+    setTimeout(() => msg('startExamMsg', claim.error || 'These login details are already being used to take this exam on another device.', true), 60);
+    return;
+  }
   startRecording();
   startTimer();
   startAnswerSync();
@@ -1900,7 +1941,13 @@ function forceCloseAlreadySubmitted() {
 
 function startHeartbeat() {
   state.heartbeatHandle = setInterval(() => {
-    apiPost('startSession', { examId: state.exam.examId, candidateId: state.user.userId }).catch(() => {});
+    apiPost('startSession', { examId: state.exam.examId, candidateId: state.user.userId, deviceId: getDeviceId() }).then(r => {
+      // If the server reports this device no longer owns the session (another
+      // device took over an abandoned slot, or the exam was submitted), stop.
+      if (r && r.success === false && (r.alreadyInUse || r.alreadySubmitted) && !state.examSubmitted) {
+        forceCloseAlreadySubmitted();
+      }
+    }).catch(() => {});
   }, HEARTBEAT_INTERVAL_MS);
 }
 
@@ -1932,7 +1979,7 @@ function setRecordingHealth(status) {
 // through the exact same pipeline real exam chunks use. Returns {ok, reason}.
 // This proves camera capture, encoding, base64 transport, Apps Script, and
 // Drive write all work end-to-end before the exam is allowed to begin.
-const REQUIRED_BACKEND_VERSION_PREFIX = 'v2.9';
+const REQUIRED_BACKEND_VERSION_PREFIX = 'v3.0';
 
 async function runRecordingPreflight() {
   // Step 1: confirm the LIVE backend is running current code. A stale
